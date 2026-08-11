@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ticketing-postgres
+    environment:
+      POSTGRES_USER: authuser
+      POSTGRES_PASSWORD: authpass
+      POSTGRES_DB: postgres
+    ports:
+      - "5434:5432" # ← changed 5432 to 5433 (local postgres using 5432)
+    volumes:
+      - ./storage/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authuser -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: ticketing-redis
+    command: >-
+      redis-server
+      --requirepass "${REDIS_PASSWORD:-DhvaniRedis2026Secure}"
+      --bind 0.0.0.0
+      --protected-mode yes
+    # DO NOT expose port 6379 publicly — internal Docker network only
+    ports:
+     - "6379:6379"
+    volumes:
+      - ./storage/redis:/data
+
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: frontend
+    ports:
+      - "8080:80" # ← changed 80 to 8081 (80 and 8080 already in use)
+
+  ragchatbotservice:
+    build:
+      context: ./ragchatbotservice
+    container_name: ragchatbotservice
+    env_file:
+      - ./ragchatbotservice/.env
+    ports:
+      - "4321:4321" 
+    volumes:
+      - ./storage/ragchatbotservice/logs:/app/logs
+      - ./storage/ragchatbotservice/data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+networks:
+  default:
+    name: rag-network

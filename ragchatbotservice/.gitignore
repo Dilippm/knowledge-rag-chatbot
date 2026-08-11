@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Environment Variables
+.env
+
+
+# Logs
+logs/
+*.log
+
+# Runtime Data
+data
+data/processed/
+data/embeddings/
+
+# Coverage
+coverage/
+
+# IDE
+.vscode/
+.idea/
+
+# OS Files
+.DS_Store
+Thumbs.db
