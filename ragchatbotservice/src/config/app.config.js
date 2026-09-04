@@ -52,5 +52,10 @@ export const appConfig = {
     port: Number(process.env.REDIS_PORT),
     password: process.env.REDIS_PASSWORD || undefined,
     db: Number(process.env.REDIS_DB ?? 0),
+  },
+  langfuse:{
+    publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+    secretKey: process.env.LANGFUSE_SECRET_KEY,
+    baseUrl: process.env.LANGFUSE_BASE_URL,
   }
 };
