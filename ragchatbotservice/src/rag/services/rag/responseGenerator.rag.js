@@ -15,15 +15,22 @@
 import { ragChain } from '../../chains/rag.chain.js';
 import logger from '../../../config/logger.config.js';
 import { formatSources } from './sourceFormatter.service.js';
-
+import { CallbackHandler } from '@langfuse/langchain';
+import { appConfig } from '../../../config/app.config.js';
 export const generateResponse = async (input) => {
   const startTime = Date.now();
 
   try {
     logger.info('Generating AI response...');
-
-    const result = await ragChain.invoke(input);
-
+const langfuseHandler = new CallbackHandler({
+  publicKey: appConfig.langfuse.publicKey,
+  secretKey: appConfig.langfuse.secretKey,
+  baseUrl: appConfig.langfuse.baseUrl,
+});
+   // const result = await ragChain.invoke(input);
+const result = await ragChain.invoke(input, {
+  callbacks: [langfuseHandler],
+});
     return {
       answer: result.answer,
       confidence: result.confidence,

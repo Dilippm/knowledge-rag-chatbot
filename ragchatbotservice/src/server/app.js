@@ -11,7 +11,7 @@
  * - Attach fallback and global error handlers.
  * -----------------------------------------------------------------------------
  */
-
+import './services/instrumentation.service.js'
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';

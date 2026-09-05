@@ -13,6 +13,7 @@ It includes a React chat interface, an Express API, a Socket.IO chat channel, Re
 ## Contents
 
 - [Architecture](#architecture)
+- [Observability](#observability)
 - [Features](#features)
 - [Technology](#technology)
 - [Quick start](#quick-start)
@@ -43,11 +44,55 @@ Guards → retrieval → prompt → structured response
         ├───────────────► PostgreSQL + PGVector
         │                 Document embeddings and similarity search
         │
-        └───────────────► LLM
-                          Embeddings and answer generation
+        ├───────────────► LLM
+        │                 Embeddings and answer generation
+        │
+        └───────────────► Observability
+                          Langfuse CallbackHandler + OpenTelemetry
+                                      │
+                                      ▼
+                          Self-hosted Langfuse
+                          traces, nested observations, and generations
 ```
 
 For a question, the service validates the input, applies lightweight guards for invalid input, greetings, prompt-injection patterns, and missing context, retrieves the most relevant chunks, builds a prompt with the retrieved context and recent conversation history, and returns a structured answer with a confidence level and source metadata.
+
+## Observability
+
+Langfuse provides observability for the RAG pipeline. The integration is composed of two cooperating layers:
+
+- `src/rag/services/rag/responseGenerator.rag.js` creates a Langfuse `CallbackHandler` and passes it to every `ragChain.invoke()` call. This records the LangChain execution, including the RAG runnable flow and LLM generation.
+- `src/server/services/instrumentation.service.js` starts an OpenTelemetry `NodeSDK` with `LangfuseSpanProcessor`. The processor exports compatible OpenTelemetry spans to Langfuse.
+
+```text
+Chat request
+    │
+    ▼
+responseGenerator.generateResponse()
+    │
+    ├── CallbackHandler ──► ragChain.invoke()
+    │                         guards → retrieval → prompt → LLM → structured response
+    │                                      │
+    │                                      ▼
+    │                         Langfuse trace with nested observations
+    │
+    └── NodeSDK + LangfuseSpanProcessor ──► exports OpenTelemetry spans
+                                               │
+                                               ▼
+                                      Self-hosted Langfuse UI
+```
+
+The self-hosted Langfuse service is defined in `docker-compose.yml`. `langfuse-web` and `langfuse-worker` use dedicated PostgreSQL, ClickHouse, Redis, and MinIO services; the UI is available at `http://localhost:3000`.
+
+Set the following backend variables in `ragchatbotservice/.env`. Create the public and secret keys in the Langfuse project, and use the Compose service hostname from inside the backend container.
+
+```env
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_BASE_URL=http://langfuse-web:3000
+```
+
+Langfuse can then be used to inspect each instrumented RAG execution, its nested operations, inputs and outputs, generation metadata, latency, token usage when supplied by the model integration, and failures reported by the traced call.
 
 ## Features
 
@@ -60,6 +105,7 @@ For a question, the service validates the input, applies lightweight guards for 
 - Redis-backed conversation history with automatic summarisation and a 30-minute session expiry.
 - Responsive React chat UI with Markdown rendering, copying, clear-chat, and request error handling.
 - Security headers, CORS, request logging, rotating application/error logs, and graceful shutdown.
+- Self-hosted Langfuse observability for instrumented LangChain RAG executions and OpenTelemetry spans.
 
 ## Technology
 
@@ -71,6 +117,7 @@ For a question, the service validates the input, applies lightweight guards for 
 | AI provider | Configurable LLM for chat and embedding generation |
 | Vector database | PostgreSQL 16 with PGVector |
 | Session store | Redis 7 |
+| Observability | Langfuse, `@langfuse/langchain`, OpenTelemetry NodeSDK, `LangfuseSpanProcessor` |
 | Operations | Docker Compose, Winston, Morgan, Helmet |
 
 ## Quick start
@@ -213,7 +260,7 @@ The service accepts Socket.IO connections on the same port as the REST API. Clie
 
 ```text
 .
-├── docker-compose.yml              # PostgreSQL, Redis, and backend service
+├── docker-compose.yml              # Application services and self-hosted Langfuse stack
 ├── frontend/                       # React/Vite chat client
 │   ├── src/components/             # Chat UI components
 │   ├── src/hooks/useChat.js        # Client-side chat state and requests
@@ -222,7 +269,8 @@ The service accepts Socket.IO connections on the same port as the REST API. Clie
 │   ├── src/config/                 # Environment-driven configuration
 │   ├── src/database/               # PGVector migration
 │   ├── src/rag/                    # Chains, prompts, guards, providers, memory
-│   ├── src/server/                 # Routes, controllers, jobs, sockets
+│   ├── src/server/                 # Routes, controllers, jobs, sockets, instrumentation
+│   │   └── services/instrumentation.service.js # OpenTelemetry + Langfuse span processor
 │   ├── data/documents/             # Knowledge-base source documents
 │   └── project-documents/docs/     # Detailed technical documentation
 └── storage/                        # Local container persistence and logs
